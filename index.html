@@ -255,11 +255,7 @@
                 var img = new Image();
                 img.crossOrigin = 'anonymous';
                 img.onload = onImageLoaded;
-                // (e) => {
-                //     console.log(1);
-                // };
                 img.src = e.target.result;
-                // updateWithNewImage(img);
             }
             fr.readAsDataURL(file);
         }
