@@ -10,6 +10,7 @@
     <script src="lploc.js"></script>
 </head>
 <script>
+    var loaderProgress = 0;
     //ui
     var ctx = null;
     var canvas = null;
@@ -42,6 +43,7 @@
                     var bytes = new Int8Array(buffer);
                     facefinder_classify_region = pico.unpack_cascade(bytes);
                     console.log('* facefinder loaded');
+                    updateLoader();
                 })
             })
             /*
@@ -57,6 +59,7 @@
                     var bytes = new Int8Array(buffer);
                     do_puploc = lploc.unpack_localizer(bytes);
                     console.log('* puploc loaded');
+                    updateLoader();
                 })
             })
             /*
@@ -262,13 +265,23 @@
         }
         input.value = "";
     }
+
+
+    function updateLoader() {
+        loaderProgress++;
+        if (loaderProgress >= 2) {
+            document.querySelectorAll('input').forEach(function(e) {
+                e.removeAttribute('disabled');
+            });
+        }
+    }
 </script>
 
 <body>
     <p>
-        <input type="button" value="Start webcam feed" onclick="button_callback()">
-        <input type="button" value="Load test pic" onclick="button_loca_pic_callback()">
-        <input type='file' id='imgfile' onchange="loadImageFile()" />
+        <input type="button" value="Start webcam feed" onclick="button_callback()" disabled/>
+        <input type="button" value="Load test pic" onclick="button_loca_pic_callback()" disabled/>
+        <input type='file' id='imgfile' onchange="loadImageFile()" disabled />
     </p>
     <hr>
     <p>
