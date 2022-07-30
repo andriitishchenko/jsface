@@ -10,17 +10,20 @@
     <script src="lploc.js"></script>
 </head>
 <script>
-    var initialized = false;
+    //ui
     var ctx = null;
-
     var canvas = null;
 
+    //global vars
+    var initialized = false;
     var facefinder_classify_region = null;
     var update_memory = null;
     var do_puploc = null;
-
-
     var banderaImg = new Image();
+
+    var IS_DEBUG = false;
+
+    var mycamvas = null;
 
     function initialize_pico() {
         if (initialized)
@@ -28,7 +31,7 @@
         /*
         	(1) initialize the pico.js face detector
         */
-        update_memory = pico.instantiate_detection_memory(5); // we will use the detecions of the last 5 frames
+        update_memory = pico.instantiate_detection_memory(1); // we will use the detecions of the last 5 frames
         facefinder_classify_region = function(r, c, s, pixels, ldim) {
             return -1.0;
         };
@@ -75,13 +78,15 @@
     function processfn(video, dt) {
         // render the video frame to the canvas element and extract RGBA pixel data
         ctx.drawImage(video, 0, 0);
-        var rgba = ctx.getImageData(0, 0, 640, 480).data;
+        var sizeWidth = ctx.canvas.width;
+        var sizeHeight = ctx.canvas.height;
+        var rgba = ctx.getImageData(0, 0, sizeWidth, sizeHeight).data;
         // prepare input to `run_cascade`
         image = {
-            "pixels": rgba_to_grayscale(rgba, 480, 640),
-            "nrows": 480,
-            "ncols": 640,
-            "ldim": 640
+            "pixels": rgba_to_grayscale(rgba, sizeHeight, sizeWidth),
+            "nrows": sizeHeight,
+            "ncols": sizeWidth,
+            "ldim": sizeWidth
         }
         params = {
                 "shiftfactor": 0.1, // move the detection window by 10% of its size
@@ -104,11 +109,13 @@
             if (dets[i][3] > 50.0) {
                 var r, c, s;
                 //
-                ctx.beginPath();
-                ctx.arc(dets[i][1], dets[i][0], dets[i][2] / 2, 0, 2 * Math.PI, false);
-                ctx.lineWidth = 3;
-                ctx.strokeStyle = 'red';
-                ctx.stroke();
+                if (IS_DEBUG) {
+                    ctx.beginPath();
+                    ctx.arc(dets[i][1], dets[i][0], dets[i][2] / 2, 0, 2 * Math.PI, false);
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = 'red';
+                    ctx.stroke();
+                }
                 //
                 // find the eye pupils for each detected face
                 // starting regions for localization are initialized based on the face bounding box
@@ -133,11 +140,13 @@
                 s = 0.35 * dets[i][2];
                 [r, c] = do_puploc(r, c, s, 63, image)
                 if (r >= 0 && c >= 0) {
-                    ctx.beginPath();
-                    ctx.arc(c, r, 1, 0, 2 * Math.PI, false);
-                    ctx.lineWidth = 3;
-                    ctx.strokeStyle = 'lime';
-                    ctx.stroke();
+                    if (IS_DEBUG) {
+                        ctx.beginPath();
+                        ctx.arc(c, r, 1, 0, 2 * Math.PI, false);
+                        ctx.lineWidth = 3;
+                        ctx.strokeStyle = 'lime';
+                        ctx.stroke();
+                    }
                     p1.x = r;
                     p1.y = c;
 
@@ -151,14 +160,22 @@
                 s = 0.35 * dets[i][2];
                 [r, c] = do_puploc(r, c, s, 63, image)
                 if (r >= 0 && c >= 0) {
-                    ctx.beginPath();
-                    ctx.arc(c, r, 1, 0, 2 * Math.PI, false);
-                    ctx.lineWidth = 3;
-                    ctx.strokeStyle = 'blue';
-                    ctx.stroke();
+                    if (IS_DEBUG) {
+                        ctx.beginPath();
+                        ctx.arc(c, r, 1, 0, 2 * Math.PI, false);
+                        ctx.lineWidth = 3;
+                        ctx.strokeStyle = 'blue';
+                        ctx.stroke();
+                    }
                     p2.x = r;
                     p2.y = c;
+                    if (p1.x == 0 && p1.y == 0) {
+                        p1.x = r;
+                        p1.y = c;
+                    }
                 }
+
+                // apply a mask (banderaface)
 
                 var face_heigth = dets[i][2] * 0.78;
                 var banderaDX = banderaImg.width / banderaImg.height;
@@ -180,26 +197,26 @@
     }
 
     function button_callback() {
-        /*
-        	(5) instantiate camera handling (see https://github.com/cbrandolino/camvas)
-        */
-        var ctx = document.getElementById('canvas').getContext('2d');
-        var mycamvas = new camvas(ctx, processfn);
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        mycamvas = new camvas(ctx, processfn);
+        update_memory = pico.instantiate_detection_memory(5);
     }
 
+    function stopCamera() {
+        if (mycamvas != null) {
+            mycamvas.stop();
+            mycamvas = null;
+            update_memory = pico.instantiate_detection_memory(1);
+        }
+    }
 
     function button_loca_pic_callback() {
+        stopCamera();
         var img = new Image();
-        img.onload = function() {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            processfn(img, null);
-        };
+        img.onload = onImageLoaded;
         img.crossOrigin = 'anonymous';
         img.src = 'test.jpg';
     }
-
-
 
     window.addEventListener("load", function(event) {
         initialize_pico();
@@ -211,60 +228,54 @@
         banderaImg.src = 'bandera-face3.png';
     });
 
-    // ==========
 
+    function onImageLoaded(e) {
+        updateWithNewImage(e.target);
+    }
 
+    function updateWithNewImage(img) {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        processfn(img, null);
+    }
 
-
-
-    function loadImage() {
-        var input, file, fr, img;
-
-        if (typeof window.FileReader !== 'function') {
-            write("The file API isn't supported on this browser yet.");
+    function loadImageFile() {
+        stopCamera();
+        var input = document.getElementById('imgfile');
+        if (!input || !input.files) {
             return;
-        }
-
-        input = document.getElementById('imgfile');
-        if (!input) {
-            write("Um, couldn't find the imgfile element.");
-        } else if (!input.files) {
-            write("This browser doesn't seem to support the `files` property of file inputs.");
         } else {
-            file = input.files[0];
-            fr = new FileReader();
-            fr.onload = function() {
-                img = new Image();
+            var file = input.files[0];
+            var fr = new FileReader();
+            fr.onload = function(e) {
+                var img = new Image();
                 img.crossOrigin = 'anonymous';
-                img.onload = function() {
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    processfn(img, null);
-                };
-                img.src = fr.result;
+                img.onload = onImageLoaded;
+                // (e) => {
+                //     console.log(1);
+                // };
+                img.src = e.target.result;
+                // updateWithNewImage(img);
             }
             fr.readAsDataURL(file);
         }
-
-        function write(msg) {
-            var p = document.createElement('p');
-            p.innerHTML = msg;
-            document.body.appendChild(p);
-        }
+        input.value = "";
     }
 </script>
 
 <body>
-    <hr>
     <p>
-        <center><input type="button" value="Start webcam feed" onclick="button_callback()"></center>
-        <center><input type="button" value="Load test pic" onclick="button_loca_pic_callback()"></center>
-        <input type='file' id='imgfile' onchange="loadImage()" />
+        <input type="button" value="Start webcam feed" onclick="button_callback()">
+        <input type="button" value="Load test pic" onclick="button_loca_pic_callback()">
+        <input type='file' id='imgfile' onchange="loadImageFile()" />
     </p>
+    <hr>
     <p>
         <center><canvas id="canvas" width=640 height=480></canvas></center>
     </p>
-    </div>
+    <hr>
+
 </body>
 
 </html>
